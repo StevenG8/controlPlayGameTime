@@ -26,7 +26,7 @@ func DefaultConfig() *Config {
 		DailyLimit: 120, // 默认 2 小时
 		ResetTime:  "08:00",
 		Games: []string{
-			"game.exe",
+			"LeagueClient.exe", // LOL
 			"steam.exe",
 		},
 		FirstThreshold: 15, // 剩余 15 分钟时警告
@@ -34,22 +34,6 @@ func DefaultConfig() *Config {
 		StateFile:      "state.json",
 		LogFile:        "game-control.log",
 	}
-}
-
-// GetConfigPath 获取默认配置文件路径
-func GetConfigPath() (string, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("无法获取用户主目录: %w", err)
-	}
-
-	configDir := filepath.Join(homeDir, ".config", "game-control")
-	// 确保配置目录存在
-	if err := os.MkdirAll(configDir, 0755); err != nil {
-		return "", fmt.Errorf("无法创建配置目录: %w", err)
-	}
-
-	return filepath.Join(configDir, "config.yaml"), nil
 }
 
 // LoadFromFile 从文件加载配置

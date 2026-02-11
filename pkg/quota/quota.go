@@ -151,9 +151,9 @@ func (q *QuotaState) SaveToFile(path string) error {
 
 // LoadFromFile 从文件加载状态
 func LoadFromFile(path string) (*QuotaState, error) {
-	// 如果文件不存在，返回 nil
+	// 如果文件不存在，返回错误
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil, nil
+		return nil, fmt.Errorf("状态文件不存在: %s", path)
 	}
 
 	data, err := os.ReadFile(path)

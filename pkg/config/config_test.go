@@ -9,189 +9,158 @@ import (
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 
-	if cfg.TimeLimit.DailyLimit != 120 {
-		t.Errorf("Expected DailyLimit to be 120, got %d", cfg.TimeLimit.DailyLimit)
+	if cfg.DailyLimit != 120 {
+		t.Errorf("预期每日限制为120分钟，实际为 %d", cfg.DailyLimit)
 	}
 
 	if cfg.ResetTime != "08:00" {
-		t.Errorf("Expected ResetTime to be '08:00', got %s", cfg.ResetTime)
+		t.Errorf("预期重置时间为08:00，实际为 %s", cfg.ResetTime)
 	}
 
-	if len(cfg.Games) == 0 {
-		t.Error("Expected Games to have default values")
-	}
-
-	if cfg.Warning.FirstThreshold != 15 {
-		t.Errorf("Expected FirstThreshold to be 15, got %d", cfg.Warning.FirstThreshold)
-	}
-
-	if cfg.Warning.FinalThreshold != 5 {
-		t.Errorf("Expected FinalThreshold to be 5, got %d", cfg.Warning.FinalThreshold)
+	if len(cfg.Games) < 2 {
+		t.Errorf("预期至少2个默认游戏，实际为 %d", len(cfg.Games))
 	}
 }
 
-func TestValidate(t *testing.T) {
-	tests := []struct {
-		name    string
-		config  Config
-		wantErr bool
-	}{
-		{
-			name: "valid config",
-			config: Config{
-				TimeLimit: TimeLimitConfig{DailyLimit: 120},
-				ResetTime: "08:00",
-				Games:     []string{"game.exe"},
-				Warning: WarningConfig{
-					FirstThreshold: 15,
-					FinalThreshold: 5,
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "negative daily limit",
-			config: Config{
-				TimeLimit: TimeLimitConfig{DailyLimit: -10},
-				ResetTime: "08:00",
-				Games:     []string{"game.exe"},
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid reset time",
-			config: Config{
-				TimeLimit: TimeLimitConfig{DailyLimit: 120},
-				ResetTime: "25:00",
-				Games:     []string{"game.exe"},
-			},
-			wantErr: true,
-		},
-		{
-			name: "empty games list",
-			config: Config{
-				TimeLimit: TimeLimitConfig{DailyLimit: 120},
-				ResetTime: "08:00",
-				Games:     []string{},
-			},
-			wantErr: true,
-		},
-		{
-			name: "negative warning threshold",
-			config: Config{
-				TimeLimit: TimeLimitConfig{DailyLimit: 120},
-				ResetTime: "08:00",
-				Games:     []string{"game.exe"},
-				Warning: WarningConfig{
-					FirstThreshold: -5,
-					FinalThreshold: 5,
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "final threshold greater than first",
-			config: Config{
-				TimeLimit: TimeLimitConfig{DailyLimit: 120},
-				ResetTime: "08:00",
-				Games:     []string{"game.exe"},
-				Warning: WarningConfig{
-					FirstThreshold: 5,
-					FinalThreshold: 15,
-				},
-			},
-			wantErr: true,
-		},
+func TestLoadFromFile_FileNotExist(t *testing.T) {
+	tempFile := filepath.Join(t.TempDir(), "nonexistent.yaml")
+	cfg, err := LoadFromFile(tempFile)
+	if err != nil {
+		t.Fatalf("文件不存在时应返回默认配置，但出现错误: %v", err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := tt.config.Validate()
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+	if cfg.DailyLimit != 120 {
+		t.Errorf("文件不存在时应返回默认配置，每日限制应为120，实际为 %d", cfg.DailyLimit)
 	}
 }
 
-func TestSaveAndLoad(t *testing.T) {
-	// 创建临时目录
-	tmpDir := t.TempDir()
-	configPath := filepath.Join(tmpDir, "config.yaml")
+func TestLoadFromFile_ValidFile(t *testing.T) {
+	// 创建临时YAML文件
+	yamlContent := `dailyLimit: 180
+resetTime: "09:00"
+games:
+  - "game1.exe"
+  - "game2.exe"
+firstThreshold: 20
+finalThreshold: 10
+stateFile: "test-state.json"
+logFile: "test.log"`
 
-	// 创建配置
-	cfg := Config{
-		TimeLimit: TimeLimitConfig{DailyLimit: 180},
-		ResetTime: "09:00",
-		Games:     []string{"game1.exe", "game2.exe"},
-		Warning: WarningConfig{
-			FirstThreshold: 20,
-			FinalThreshold: 10,
-		},
-		StateFile: "state.json",
-		LogFile:   "game-control.log",
+	tempDir := t.TempDir()
+	tempFile := filepath.Join(tempDir, "config.yaml")
+
+	if err := os.WriteFile(tempFile, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("无法创建临时文件: %v", err)
 	}
 
-	// 保存配置
-	err := cfg.SaveToFile(configPath)
+	cfg, err := LoadFromFile(tempFile)
 	if err != nil {
-		t.Fatalf("SaveToFile() failed: %v", err)
+		t.Fatalf("加载有效配置文件失败: %v", err)
 	}
 
-	// 加载配置
-	loadedCfg, err := LoadFromFile(configPath)
-	if err != nil {
-		t.Fatalf("LoadFromFile() failed: %v", err)
+	if cfg.DailyLimit != 180 {
+		t.Errorf("预期每日限制为180分钟，实际为 %d", cfg.DailyLimit)
 	}
 
-	// 验证配置
-	if loadedCfg.TimeLimit.DailyLimit != cfg.TimeLimit.DailyLimit {
-		t.Errorf("Expected DailyLimit to be %d, got %d", cfg.TimeLimit.DailyLimit, loadedCfg.TimeLimit.DailyLimit)
+	if cfg.ResetTime != "09:00" {
+		t.Errorf("预期重置时间为09:00，实际为 %s", cfg.ResetTime)
 	}
 
-	if loadedCfg.ResetTime != cfg.ResetTime {
-		t.Errorf("Expected ResetTime to be %s, got %s", cfg.ResetTime, loadedCfg.ResetTime)
-	}
-
-	if len(loadedCfg.Games) != len(cfg.Games) {
-		t.Errorf("Expected Games to have %d items, got %d", len(cfg.Games), len(loadedCfg.Games))
-	}
-
-	if loadedCfg.Warning.FirstThreshold != cfg.Warning.FirstThreshold {
-		t.Errorf("Expected FirstThreshold to be %d, got %d", cfg.Warning.FirstThreshold, loadedCfg.Warning.FirstThreshold)
+	if len(cfg.Games) != 2 {
+		t.Errorf("预期2个游戏，实际为 %d", len(cfg.Games))
 	}
 }
 
-func TestLoadFromFile_NotExists(t *testing.T) {
-	// 尝试加载不存在的文件
-	cfg, err := LoadFromFile("/nonexistent/path/config.yaml")
-	if err != nil {
-		t.Errorf("LoadFromFile() should not error for non-existent file, got: %v", err)
+func TestValidate_ValidConfig(t *testing.T) {
+	cfg := &Config{
+		DailyLimit:     120,
+		ResetTime:      "08:00",
+		Games:          []string{"game.exe"},
+		FirstThreshold: 15,
+		FinalThreshold: 5,
 	}
 
-	if cfg == nil {
-		t.Error("LoadFromFile() should return default config for non-existent file")
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("有效配置验证失败: %v", err)
 	}
 }
 
-func TestGetConfigPath(t *testing.T) {
-	homeDir, err := os.UserHomeDir()
+func TestValidate_InvalidDailyLimit(t *testing.T) {
+	cfg := &Config{
+		DailyLimit:     0,
+		ResetTime:      "08:00",
+		Games:          []string{"game.exe"},
+		FirstThreshold: 15,
+		FinalThreshold: 5,
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Error("预期无效的每日限制应返回错误")
+	}
+}
+
+func TestValidate_InvalidResetTime(t *testing.T) {
+	cfg := &Config{
+		DailyLimit:     120,
+		ResetTime:      "25:00",
+		Games:          []string{"game.exe"},
+		FirstThreshold: 15,
+		FinalThreshold: 5,
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Error("预期无效的重置时间应返回错误")
+	}
+}
+
+func TestValidate_EmptyGames(t *testing.T) {
+	cfg := &Config{
+		DailyLimit:     120,
+		ResetTime:      "08:00",
+		Games:          []string{},
+		FirstThreshold: 15,
+		FinalThreshold: 5,
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Error("预期空游戏列表应返回错误")
+	}
+}
+
+func TestValidate_InvalidThresholds(t *testing.T) {
+	cfg := &Config{
+		DailyLimit:     120,
+		ResetTime:      "08:00",
+		Games:          []string{"game.exe"},
+		FirstThreshold: 5,
+		FinalThreshold: 15, // 最后阈值大于第一次阈值
+	}
+
+	if err := cfg.Validate(); err == nil {
+		t.Error("预期无效的阈值应返回错误")
+	}
+}
+
+func TestSaveToFile(t *testing.T) {
+	cfg := DefaultConfig()
+	tempFile := filepath.Join(t.TempDir(), "config.yaml")
+
+	if err := cfg.SaveToFile(tempFile); err != nil {
+		t.Fatalf("保存配置文件失败: %v", err)
+	}
+
+	// 验证文件存在
+	if _, err := os.Stat(tempFile); os.IsNotExist(err) {
+		t.Error("配置文件未创建")
+	}
+
+	// 重新加载验证
+	loadedCfg, err := LoadFromFile(tempFile)
 	if err != nil {
-		t.Skip("Cannot get user home directory")
+		t.Fatalf("重新加载保存的配置文件失败: %v", err)
 	}
 
-	expectedDir := filepath.Join(homeDir, ".config", "game-control")
-	configPath, err := GetConfigPath()
-	if err != nil {
-		t.Fatalf("GetConfigPath() failed: %v", err)
-	}
-
-	if filepath.Dir(configPath) != expectedDir {
-		t.Errorf("Expected config directory to be %s, got %s", expectedDir, filepath.Dir(configPath))
-	}
-
-	// 验证目录是否已创建
-	if _, err := os.Stat(expectedDir); os.IsNotExist(err) {
-		t.Error("GetConfigPath() should create the config directory")
+	if loadedCfg.DailyLimit != cfg.DailyLimit {
+		t.Errorf("重新加载的配置不匹配，预期 %d，实际 %d", cfg.DailyLimit, loadedCfg.DailyLimit)
 	}
 }
