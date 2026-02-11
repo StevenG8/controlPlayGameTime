@@ -5,7 +5,7 @@
 
 #### 场景: 启动时加载配置
 - **当** 系统启动时
-- **则** 它从默认配置文件位置（例如 ~/.config/game-control/config.yaml）加载配置
+- **则** 它从默认配置文件位置（例如 %USERPROFILE%\.config\game-control\config.yaml）加载配置
 
 #### 场景: 从自定义路径加载配置
 - **当** 系统启动并指定了自定义配置文件路径时
