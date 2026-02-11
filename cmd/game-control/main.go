@@ -2,14 +2,11 @@ package main
 
 import (
 	"fmt"
-	"os"
-	"os/exec"
-	"runtime"
-
 	"github.com/yourusername/game-control/internal"
 	"github.com/yourusername/game-control/pkg/config"
 	"github.com/yourusername/game-control/pkg/logger"
 	"github.com/yourusername/game-control/pkg/quota"
+	"os"
 )
 
 func main() {
@@ -50,25 +47,9 @@ func main() {
 	}
 }
 
-// IsAdmin 检查是否以管理员权限运行
-func IsAdmin() bool {
-	if runtime.GOOS != "windows" {
-		return false
-	}
-
-	cmd := exec.Command("net", "session")
-	err := cmd.Run()
-	return err == nil
-}
-
 func runStart() error {
-	// 检查管理员权限
-	if !IsAdmin() {
-		return fmt.Errorf("需要管理员权限来终止游戏进程，请以管理员身份运行")
-	}
-
 	// 获取配置文件路径
-	configPath := "config.yaml"
+	configPath := "config.yaml.tmpl"
 	if len(os.Args) > 2 {
 		configPath = os.Args[2]
 	}
@@ -120,7 +101,7 @@ func runStart() error {
 }
 
 func runStatus() error {
-	configPath := "config.yaml"
+	configPath := "config.yaml.tmpl"
 	if len(os.Args) > 2 {
 		configPath = os.Args[2]
 	}
@@ -171,7 +152,7 @@ func runStatus() error {
 }
 
 func runReset() error {
-	configPath := "config.yaml"
+	configPath := "config.yaml.tmpl"
 	if len(os.Args) > 2 {
 		configPath = os.Args[2]
 	}
@@ -207,7 +188,7 @@ func runReset() error {
 }
 
 func runValidate() error {
-	configPath := "config.yaml"
+	configPath := "config.yaml.tmpl"
 	if len(os.Args) > 2 {
 		configPath = os.Args[2]
 	}
@@ -247,7 +228,7 @@ func printHelp() {
 	fmt.Println("  help           显示此帮助信息")
 	fmt.Println()
 	fmt.Println("说明:")
-	fmt.Println("  - 默认配置文件路径: config.yaml")
+	fmt.Println("  - 默认配置文件路径: config.yaml.tmpl")
 	fmt.Println("  - 需要管理员权限来终止游戏进程")
 	fmt.Println("  - 仅支持 Windows 系统")
 }
