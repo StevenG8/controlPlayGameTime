@@ -3,25 +3,32 @@ package quota
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/yourusername/game-control/pkg/config"
 	"os"
+	"sync"
 	"time"
 )
 
 // QuotaState 配额状态
 type QuotaState struct {
-	LastResetDate   string `json:"lastResetDate"`   // 上次重置日期 (YYYY-MM-DD)
-	AccumulatedTime int64  `json:"accumulatedTime"` // 累计游戏时间（毫秒）TODO: 单位直接秒就好
-	LastUpdated     int64  `json:"lastUpdated"`     // 上次更新时间（Unix 时间戳）
-	NextResetTime   int64  `json:"nextResetTime"`   // 下次重置时间（Unix 时间戳）
+	mu  sync.Mutex
+	cfg *config.Config
+
+	AccumulatedTime int64 `json:"accumulatedTime"` // 累计游戏时间（秒）
+	LastResetTime   int64 `json:"lastResetTime"`   // 上次重置时间（Unix 时间戳）
+	NextResetTime   int64 `json:"nextResetTime"`   // 下次重置时间（Unix 时间戳）
+}
+
+func (q *QuotaState) SetCfg(cfg *config.Config) {
+	q.cfg = cfg
 }
 
 // NewQuotaState 创建新的配额状态
-func NewQuotaState(resetTime string) (*QuotaState, error) {
+func NewQuotaState(cfg *config.Config) (*QuotaState, error) {
 	now := time.Now()
-	today := now.Format("2006-01-02")
 
 	// 解析重置时间
-	resetTimeParsed, err := time.Parse("15:04", resetTime)
+	resetTimeParsed, err := time.Parse("15:04", cfg.ResetTime)
 	if err != nil {
 		return nil, fmt.Errorf("无效的重置时间格式: %w", err)
 	}
@@ -36,22 +43,27 @@ func NewQuotaState(resetTime string) (*QuotaState, error) {
 	}
 
 	return &QuotaState{
-		LastResetDate:   today,
+		cfg:             cfg,
 		AccumulatedTime: 0,
-		LastUpdated:     now.Unix(),
+		LastResetTime:   now.Unix(),
 		NextResetTime:   nextReset.Unix(),
 	}, nil
 }
 
 // GetAccumulatedMinutes 获取累计游戏时间（分钟）
 func (q *QuotaState) GetAccumulatedMinutes() int {
-	return int(q.AccumulatedTime / 60000)
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return int(q.AccumulatedTime / 60)
 }
 
 // GetRemainingMinutes 获取剩余可用时间（分钟）
-func (q *QuotaState) GetRemainingMinutes(dailyLimit int) int { // TODO: 为什么不直接读取配置呢. 而是由外部传进来？
-	accumulated := q.GetAccumulatedMinutes()
-	remaining := dailyLimit - accumulated
+func (q *QuotaState) GetRemainingMinutes() int {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	accumulated := int(q.AccumulatedTime / 60)
+	remaining := q.cfg.DailyLimit - accumulated
 	if remaining < 0 {
 		return 0
 	}
@@ -59,47 +71,40 @@ func (q *QuotaState) GetRemainingMinutes(dailyLimit int) int { // TODO: 为什�
 }
 
 // IsLimitExceeded 检查是否超过时间限制
-func (q *QuotaState) IsLimitExceeded(dailyLimit int) bool {
-	return q.GetAccumulatedMinutes() >= dailyLimit // TODO: 为什么不直接读取配置呢. 而是由外部传进来？
+func (q *QuotaState) IsLimitExceeded() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	return int(q.AccumulatedTime/60) >= q.cfg.DailyLimit
 }
 
-// AddTime 增加累计时间（毫秒）
-func (q *QuotaState) AddTime(milliseconds int64) { // TODO: 线程安全问题?
-	q.AccumulatedTime += milliseconds
-	q.LastUpdated = time.Now().Unix()
+// AddTime 增加累计时间（秒）
+func (q *QuotaState) AddTime(seconds int64) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.AccumulatedTime += seconds
 }
 
 // ShouldReset 检查是否应该重置配额
-func (q *QuotaState) ShouldReset(resetTime string) (bool, error) { // TODO: 不是已经有存下一次重置时间吗？有必要要外部传resetTime吗?
-	now := time.Now()
-	today := now.Format("2006-01-02")
+func (q *QuotaState) ShouldReset() (bool, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 
-	// 如果日期已改变，需要重置
-	if q.LastResetDate != today {
-		return true, nil
-	}
-
-	// 检查是否已过重置时间
-	resetTimeParsed, err := time.Parse("15:04", resetTime)
-	if err != nil {
-		return false, fmt.Errorf("无效的重置时间格式: %w", err)
-	}
-
-	todayReset := time.Date(now.Year(), now.Month(), now.Day(),
-		resetTimeParsed.Hour(), resetTimeParsed.Minute(), 0, 0, now.Location())
-
-	return now.After(todayReset), nil
+	// 使用已存储的下次重置时间
+	return time.Now().After(time.Unix(q.NextResetTime, 0)), nil
 }
 
 // Reset 重置配额
-func (q *QuotaState) Reset(resetTime string) error {
+func (q *QuotaState) Reset() error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	now := time.Now()
-	q.LastResetDate = now.Format("2006-01-02")
 	q.AccumulatedTime = 0
-	q.LastUpdated = now.Unix()
+	q.LastResetTime = now.Unix()
 
 	// 重新计算下次重置时间
-	resetTimeParsed, err := time.Parse("15:04", resetTime)
+	resetTimeParsed, err := time.Parse("15:04", q.cfg.ResetTime)
 	if err != nil {
 		return fmt.Errorf("无效的重置时间格式: %w", err)
 	}
@@ -129,6 +134,9 @@ func (q *QuotaState) TimeUntilNextReset() time.Duration {
 
 // SaveToFile 保存状态到文件
 func (q *QuotaState) SaveToFile(path string) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
 	data, err := json.MarshalIndent(q, "", "  ")
 	if err != nil {
 		return fmt.Errorf("无法序列化状态: %w", err)
@@ -163,15 +171,11 @@ func LoadFromFile(path string) (*QuotaState, error) {
 
 // Validate 验证状态完整性
 func (q *QuotaState) Validate() error {
-	if q.LastResetDate == "" {
-		return fmt.Errorf("缺少上次重置日期")
-	}
-
 	if q.AccumulatedTime < 0 {
 		return fmt.Errorf("累计时间不能为负数")
 	}
 
-	if q.LastUpdated <= 0 {
+	if q.LastResetTime <= 0 {
 		return fmt.Errorf("无效的更新时间")
 	}
 
@@ -183,11 +187,18 @@ func (q *QuotaState) Validate() error {
 }
 
 // CheckWarningThresholds 检查警告阈值
-func (q *QuotaState) CheckWarningThresholds(dailyLimit, firstThreshold, finalThreshold int) (first, final bool) {
-	remaining := q.GetRemainingMinutes(dailyLimit)
+func (q *QuotaState) CheckWarningThresholds() (first, final bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 
-	first = remaining <= firstThreshold && remaining > finalThreshold
-	final = remaining <= finalThreshold
+	accumulated := int(q.AccumulatedTime / 60)
+	remaining := q.cfg.DailyLimit - accumulated
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	first = remaining <= q.cfg.FirstThreshold && remaining > q.cfg.FinalThreshold
+	final = remaining <= q.cfg.FinalThreshold
 
 	return
 }

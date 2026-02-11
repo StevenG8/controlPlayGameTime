@@ -3,12 +3,12 @@ package main
 import (
 	"fmt"
 	"os"
-	"time"
+	"os/exec"
+	"runtime"
 
 	"github.com/yourusername/game-control/internal"
 	"github.com/yourusername/game-control/pkg/config"
 	"github.com/yourusername/game-control/pkg/logger"
-	"github.com/yourusername/game-control/pkg/process"
 	"github.com/yourusername/game-control/pkg/quota"
 )
 
@@ -50,9 +50,20 @@ func main() {
 	}
 }
 
+// IsAdmin 检查是否以管理员权限运行
+func IsAdmin() bool {
+	if runtime.GOOS != "windows" {
+		return false
+	}
+
+	cmd := exec.Command("net", "session")
+	err := cmd.Run()
+	return err == nil
+}
+
 func runStart() error {
 	// 检查管理员权限
-	if !process.IsAdmin() {
+	if !IsAdmin() {
 		return fmt.Errorf("需要管理员权限来终止游戏进程，请以管理员身份运行")
 	}
 
@@ -84,16 +95,17 @@ func runStart() error {
 	var qState *quota.QuotaState
 	loadedState, err := quota.LoadFromFile(cfg.StateFile)
 	if err != nil || loadedState == nil {
-		qState, err = quota.NewQuotaState(cfg.ResetTime)
+		qState, err = quota.NewQuotaState(cfg)
 		if err != nil {
 			return fmt.Errorf("创建配额状态失败: %w", err)
 		}
 	} else {
 		qState = loadedState
+		qState.SetCfg(cfg)
 		// 验证状态
 		if err := qState.Validate(); err != nil {
 			log.Warn(fmt.Sprintf("状态验证失败，创建新状态: %v", err))
-			qState, err = quota.NewQuotaState(cfg.ResetTime)
+			qState, err = quota.NewQuotaState(cfg)
 			if err != nil {
 				return fmt.Errorf("创建配额状态失败: %w", err)
 			}
@@ -143,11 +155,8 @@ func runStatus() error {
 	fmt.Printf("每日时间限制: %d 分钟\n", status.DailyLimit)
 
 	if status.ActiveProcessCount > 0 {
-		fmt.Printf("\n活跃游戏进程 (%d):\n", status.ActiveProcessCount)
-		for _, proc := range status.ActiveProcesses {
-			duration := process.FormatDurationShort(time.Since(proc.StartTime).Milliseconds())
-			fmt.Printf("  - %s (PID: %d, 运行时长: %s)\n", proc.Name, proc.PID, duration)
-		}
+		fmt.Printf("\n活跃游戏进程: %d 个\n", status.ActiveProcessCount)
+		fmt.Println("  (进程详情需要实时扫描，此处只显示数量)")
 	} else {
 		fmt.Println("\n当前没有活跃的游戏进程")
 	}
@@ -184,7 +193,7 @@ func runReset() error {
 	}
 
 	// 重置配额
-	if err := qState.Reset(cfg.ResetTime); err != nil {
+	if err := qState.Reset(); err != nil {
 		return fmt.Errorf("重置配额失败: %w", err)
 	}
 
@@ -215,11 +224,11 @@ func runValidate() error {
 	}
 
 	fmt.Println("配置文件验证通过")
-	fmt.Printf("每日时间限制: %d 分钟\n", cfg.TimeLimit.DailyLimit)
+	fmt.Printf("每日时间限制: %d 分钟\n", cfg.DailyLimit)
 	fmt.Printf("重置时间: %s\n", cfg.ResetTime)
 	fmt.Printf("游戏进程列表: %v\n", cfg.Games)
 	fmt.Printf("警告阈值: %d 分钟 (第一次), %d 分钟 (最后)\n",
-		cfg.Warning.FirstThreshold, cfg.Warning.FinalThreshold)
+		cfg.FirstThreshold, cfg.FinalThreshold)
 
 	return nil
 }

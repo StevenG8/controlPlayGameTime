@@ -11,42 +11,28 @@ import (
 
 // Config 应用配置
 type Config struct {
-	TimeLimit TimeLimitConfig `yaml:"timeLimit"`
-	ResetTime string          `yaml:"resetTime"` // 格式: "08:00"
-	Games     []string        `yaml:"games"`     // 游戏进程名称列表
-	Warning   WarningConfig   `yaml:"warning"`
-	StateFile string          `yaml:"stateFile"` // 状态文件路径
-	LogFile   string          `yaml:"logFile"`   // 日志文件路径
-}
-
-// TimeLimitConfig 时间限制配置
-type TimeLimitConfig struct {
-	DailyLimit int `yaml:"dailyLimit"` // 每日游戏时间限制（分钟）
-}
-
-// WarningConfig 警告配置
-type WarningConfig struct {
-	FirstThreshold int `yaml:"firstThreshold"` // 第一次警告阈值（分钟）
-	FinalThreshold int `yaml:"finalThreshold"` // 最后警告阈值（分钟）
+	DailyLimit     int      `yaml:"dailyLimit"`     // 每日游戏时间限制（分钟）
+	ResetTime      string   `yaml:"resetTime"`      // 格式: "08:00"
+	Games          []string `yaml:"games"`          // 游戏进程名称列表
+	FirstThreshold int      `yaml:"firstThreshold"` // 第一次警告阈值（分钟）
+	FinalThreshold int      `yaml:"finalThreshold"` // 最后警告阈值（分钟）
+	StateFile      string   `yaml:"stateFile"`      // 状态文件路径
+	LogFile        string   `yaml:"logFile"`        // 日志文件路径
 }
 
 // DefaultConfig 返回默认配置
 func DefaultConfig() *Config {
 	return &Config{
-		TimeLimit: TimeLimitConfig{
-			DailyLimit: 120, // 默认 2 小时
-		},
-		ResetTime: "08:00",
+		DailyLimit: 120, // 默认 2 小时
+		ResetTime:  "08:00",
 		Games: []string{
 			"game.exe",
 			"steam.exe",
 		},
-		Warning: WarningConfig{
-			FirstThreshold: 15, // 剩余 15 分钟时警告
-			FinalThreshold: 5,  // 剩余 5 分钟时警告
-		},
-		StateFile: "state.json",
-		LogFile:   "game-control.log",
+		FirstThreshold: 15, // 剩余 15 分钟时警告
+		FinalThreshold: 5,  // 剩余 5 分钟时警告
+		StateFile:      "state.json",
+		LogFile:        "game-control.log",
 	}
 }
 
@@ -89,7 +75,7 @@ func LoadFromFile(path string) (*Config, error) {
 // Validate 验证配置
 func (c *Config) Validate() error {
 	// 验证每日时间限制
-	if c.TimeLimit.DailyLimit <= 0 {
+	if c.DailyLimit <= 0 {
 		return fmt.Errorf("每日时间限制必须大于 0")
 	}
 
@@ -105,11 +91,11 @@ func (c *Config) Validate() error {
 	}
 
 	// 验证警告阈值
-	if c.Warning.FirstThreshold < 0 || c.Warning.FinalThreshold < 0 {
+	if c.FirstThreshold < 0 || c.FinalThreshold < 0 {
 		return fmt.Errorf("警告阈值不能为负数")
 	}
 
-	if c.Warning.FinalThreshold > c.Warning.FirstThreshold {
+	if c.FinalThreshold > c.FirstThreshold {
 		return fmt.Errorf("最后警告阈值不能大于第一次警告阈值")
 	}
 

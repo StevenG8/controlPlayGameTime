@@ -125,48 +125,6 @@ func (s *Scanner) FindGameProcesses(gameNames []string) ([]ProcessInfo, error) {
 	return gameProcesses, nil
 }
 
-// GetNewProcesses 获取新启动的进程
-func (s *Scanner) GetNewProcesses(currentProcesses []ProcessInfo) []ProcessInfo {
-	currentMap := make(map[int]ProcessInfo)
-	for _, proc := range currentProcesses {
-		currentMap[proc.PID] = proc
-	}
-
-	newProcesses := make([]ProcessInfo, 0)
-	for pid, proc := range currentMap {
-		if _, exists := s.lastProcesses[pid]; !exists {
-			newProcesses = append(newProcesses, proc)
-		}
-	}
-
-	return newProcesses
-}
-
-// GetStoppedProcesses 获取已停止的进程
-func (s *Scanner) GetStoppedProcesses(currentProcesses []ProcessInfo) []ProcessInfo {
-	currentMap := make(map[int]ProcessInfo)
-	for _, proc := range currentProcesses {
-		currentMap[proc.PID] = proc
-	}
-
-	stoppedProcesses := make([]ProcessInfo, 0)
-	for pid, proc := range s.lastProcesses {
-		if _, exists := currentMap[pid]; !exists {
-			stoppedProcesses = append(stoppedProcesses, proc)
-		}
-	}
-
-	return stoppedProcesses
-}
-
-// UpdateLastProcesses 更新上次扫描的进程
-func (s *Scanner) UpdateLastProcesses(processes []ProcessInfo) {
-	s.lastProcesses = make(map[int]ProcessInfo)
-	for _, proc := range processes {
-		s.lastProcesses[proc.PID] = proc
-	}
-}
-
 // TerminateProcess 终止进程
 func (s *Scanner) TerminateProcess(pid int) error {
 	if runtime.GOOS != "windows" {
@@ -181,17 +139,6 @@ func (s *Scanner) TerminateProcess(pid int) error {
 	}
 
 	return nil
-}
-
-// TerminateProcesses 批量终止进程
-func (s *Scanner) TerminateProcesses(processes []ProcessInfo) []error {
-	errors := make([]error, 0)
-	for _, proc := range processes {
-		if err := s.TerminateProcess(proc.PID); err != nil {
-			errors = append(errors, err)
-		}
-	}
-	return errors
 }
 
 // CheckProcessRunning 检查指定 PID 的进程是否正在运行
@@ -210,36 +157,8 @@ func (s *Scanner) CheckProcessRunning(pid int) (bool, error) {
 	return false, nil
 }
 
-// GetProcessByName 根据名称获取进程
-func (s *Scanner) GetProcessByName(name string) ([]ProcessInfo, error) {
-	processes, err := s.ScanProcesses()
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]ProcessInfo, 0)
-	for _, proc := range processes {
-		if strings.EqualFold(proc.Name, name) {
-			result = append(result, proc)
-		}
-	}
-
-	return result, nil
-}
-
-// IsAdmin 检查是否以管理员权限运行
-func IsAdmin() bool {
-	if runtime.GOOS != "windows" {
-		return false
-	}
-
-	cmd := exec.Command("net", "session")
-	err := cmd.Run()
-	return err == nil
-}
-
-// RunWithRetry 带重试的进程终止
-func (s *Scanner) RunWithRetry(pid int, maxRetries int, retryDelay time.Duration) error {
+// TerminateWithRetry 带重试的进程终止
+func (s *Scanner) TerminateWithRetry(pid int, maxRetries int, retryDelay time.Duration) error {
 	var lastErr error
 	for i := 0; i < maxRetries; i++ {
 		err := s.TerminateProcess(pid)
