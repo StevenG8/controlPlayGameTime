@@ -1,7 +1,7 @@
 # game-control
 
 Windows 下的游戏时长控制工具。  
-支持进程监控、超限自动终止、阈值弹窗提醒，以及开机后自动后台运行。
+支持进程监控、超限自动终止、阈值弹窗提醒，以及后台运行。
 
 ## 构建
 
@@ -15,25 +15,51 @@ go build -o game-control.exe ./cmd/game-control
 game-control <command> [参数]
 ```
 
-- `start [config] [--background]`: 启动控制器
-- `install-autostart [config]`: 安装 Windows 开机自启动任务（登录后触发）
-- `remove-autostart`: 移除开机自启动任务
+- `start [config]`: 启动控制器
 - `status [config]`: 查看当前状态
 - `validate [config]`: 校验配置
 - `help`: 查看帮助
 
 ### `start` 参数
 
-- `--background` 或 `-b`: 后台模式运行（仅 `start` 支持）
 - `config`: 可选配置文件路径，默认 `config.yaml`
+
+## 后台运行（PowerShell）
+
+后台运行由用户在启动命令中决定，推荐使用 PowerShell：
+
+```powershell
+Start-Process -FilePath ".\game-control.exe" -ArgumentList 'start','config.yaml' -WindowStyle Hidden
+```
+
+检查是否已运行：
+
+```powershell
+Get-Process game-control -ErrorAction SilentlyContinue
+```
+
+## 自启动
+
+通过分发目录中的脚本管理（Windows Task Scheduler）：
+
+```powershell
+.\add-autostart.bat
+```
+
+移除自启动任务：
+
+```powershell
+.\remove-autostart.bat
+```
+
+说明：默认自启动任务会调用分发目录中的 `start-background.bat`，该脚本内部使用绝对路径后台启动 `game-control.exe start config.yaml`。
 
 ## 示例
 
 ```bash
 game-control start
-game-control start config.yaml --background
-game-control install-autostart config.yaml
-game-control remove-autostart
+add-autostart.bat
+remove-autostart.bat
 game-control status
 game-control validate
 ```

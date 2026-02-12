@@ -3,16 +3,12 @@ package main
 import (
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
-	"strings"
-
 	"github.com/yourusername/game-control/internal"
-	"github.com/yourusername/game-control/pkg/autostart"
 	"github.com/yourusername/game-control/pkg/config"
 	"github.com/yourusername/game-control/pkg/logger"
 	"github.com/yourusername/game-control/pkg/quota"
 	"github.com/yourusername/game-control/pkg/singleinstance"
+	"os"
 )
 
 func main() {
@@ -26,16 +22,6 @@ func main() {
 	switch command {
 	case "start":
 		if err := runStart(); err != nil {
-			fmt.Fprintf(os.Stderr, "错误: %v\n", err)
-			os.Exit(1)
-		}
-	case "install-autostart":
-		if err := runInstallAutostart(); err != nil {
-			fmt.Fprintf(os.Stderr, "错误: %v\n", err)
-			os.Exit(1)
-		}
-	case "remove-autostart":
-		if err := runRemoveAutostart(); err != nil {
 			fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 			os.Exit(1)
 		}
@@ -59,9 +45,9 @@ func main() {
 }
 
 func runStart() error {
-	configPath, background, err := parseStartArgs(os.Args[2:])
-	if err != nil {
-		return err
+	configPath := "config.yaml"
+	if len(os.Args) > 2 {
+		configPath = os.Args[2]
 	}
 
 	cfg, err := config.LoadFromFile(configPath)
@@ -87,10 +73,6 @@ func runStart() error {
 	}
 	defer log.Close()
 
-	if background {
-		log.Info("以后台模式启动")
-	}
-
 	var qState *quota.QuotaState
 	loadedState, err := quota.LoadFromFile(cfg)
 	if err != nil || loadedState == nil {
@@ -111,61 +93,6 @@ func runStart() error {
 
 	controller := internal.NewController(cfg, qState, log)
 	return controller.Run()
-}
-
-func parseStartArgs(args []string) (string, bool, error) {
-	configPath := "config.yaml"
-	background := false
-	configSet := false
-
-	for _, arg := range args {
-		switch arg {
-		case "--background", "-b":
-			background = true
-		default:
-			if strings.HasPrefix(arg, "-") {
-				return "", false, fmt.Errorf("未知参数: %s", arg)
-			}
-			if configSet {
-				return "", false, fmt.Errorf("仅允许指定一个配置文件路径")
-			}
-			configPath = arg
-			configSet = true
-		}
-	}
-
-	return configPath, background, nil
-}
-
-func runInstallAutostart() error {
-	configPath := "config.yaml"
-	if len(os.Args) > 2 {
-		configPath = os.Args[2]
-	}
-
-	exePath, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("获取可执行文件路径失败: %w", err)
-	}
-	exePath, err = filepath.Abs(exePath)
-	if err != nil {
-		return fmt.Errorf("解析可执行文件路径失败: %w", err)
-	}
-
-	if err := autostart.InstallTask(exePath, configPath); err != nil {
-		return err
-	}
-
-	fmt.Println("已安装开机自启动任务")
-	return nil
-}
-
-func runRemoveAutostart() error {
-	if err := autostart.RemoveTask(); err != nil {
-		return err
-	}
-	fmt.Println("已移除开机自启动任务")
-	return nil
 }
 
 func runStatus() error {
@@ -260,24 +187,17 @@ func printHelp() {
 	fmt.Println("  game-control <command> [参数]")
 	fmt.Println()
 	fmt.Println("可用命令:")
-	fmt.Println("  start [config] [--background]     启动游戏时间控制守护进程")
-	fmt.Println("  install-autostart [config]        安装 Windows 开机自启动任务")
-	fmt.Println("  remove-autostart                  移除 Windows 开机自启动任务")
+	fmt.Println("  start [config]                    启动游戏时间控制守护进程")
 	fmt.Println("  status [config]                   查询当前游戏时间状态")
 	fmt.Println("  validate [config]                 验证配置文件")
 	fmt.Println("  help                              显示此帮助信息")
-	fmt.Println()
-	fmt.Println("参数说明:")
-	fmt.Println("  --background, -b  以后台模式运行（仅 start 命令支持）")
 	fmt.Println()
 	fmt.Println("说明:")
 	fmt.Println("  - 默认配置文件路径: config.yaml")
 	fmt.Println("  - 需要管理员权限来终止游戏进程")
 	fmt.Println("  - 仅支持 Windows 系统")
+	fmt.Println("  - 后台运行请使用 PowerShell Start-Process 或 bat 脚本启动")
 	fmt.Println()
 	fmt.Println("示例:")
 	fmt.Println("  game-control start")
-	fmt.Println("  game-control start config.yaml --background")
-	fmt.Println("  game-control install-autostart config.yaml")
-	fmt.Println("  game-control remove-autostart")
 }

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -32,21 +33,34 @@ type Logger struct {
 	output *os.File
 }
 
+var logHandle *Logger
+var once sync.Once
+
 // NewLogger 创建新的日志记录器
 func NewLogger(outputPath string) (*Logger, error) {
-	var output *os.File
-	var err error
+	once.Do(func() {
+		var output *os.File
+		var err error
 
-	if outputPath == "" {
-		output = os.Stdout
-	} else {
-		output, err = os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		if err != nil {
-			return nil, fmt.Errorf("无法打开日志文件: %w", err)
+		if outputPath == "" {
+			output = os.Stdout
+		} else {
+			output, err = os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+			if err != nil {
+				panic(fmt.Sprintf("无法打开日志文件: %w", err))
+			}
 		}
-	}
+		logHandle = &Logger{output: output}
+	})
 
-	return &Logger{output: output}, nil
+	return logHandle, nil
+}
+
+func GetLogger() *Logger {
+	if logHandle == nil {
+		panic("not init logger")
+	}
+	return logHandle
 }
 
 // Close 关闭日志记录器
