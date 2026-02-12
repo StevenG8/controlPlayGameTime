@@ -9,25 +9,50 @@ import (
 
 	"github.com/yourusername/game-control/pkg/config"
 	"github.com/yourusername/game-control/pkg/logger"
+	"github.com/yourusername/game-control/pkg/notifier"
 	"github.com/yourusername/game-control/pkg/process"
 	"github.com/yourusername/game-control/pkg/quota"
 )
+
+type processScanner interface {
+	FindGameProcesses(gameNames []string) ([]process.ProcessInfo, error)
+	TerminateWithRetry(pid int, maxRetries int, retryDelay time.Duration) error
+}
 
 // Controller 主控制器
 type Controller struct {
 	config       *config.Config
 	quotaState   *quota.QuotaState
-	scanner      *process.Scanner
+	scanner      processScanner
+	notifier     notifier.Notifier
 	logger       *logger.Logger
 	lastSaveTime time.Time
 }
 
 // NewController 创建新的控制器
 func NewController(cfg *config.Config, qState *quota.QuotaState, log *logger.Logger) *Controller {
+	return NewControllerWithDeps(cfg, qState, log, process.NewScanner(), notifier.NewNotifier())
+}
+
+// NewControllerWithDeps 创建可注入依赖的控制器（用于测试）
+func NewControllerWithDeps(
+	cfg *config.Config,
+	qState *quota.QuotaState,
+	log *logger.Logger,
+	scanner processScanner,
+	n notifier.Notifier,
+) *Controller {
+	if scanner == nil {
+		scanner = process.NewScanner()
+	}
+	if n == nil {
+		n = notifier.NewNotifier()
+	}
 	return &Controller{
 		config:       cfg,
 		quotaState:   qState,
-		scanner:      process.NewScanner(),
+		scanner:      scanner,
+		notifier:     n,
 		logger:       log,
 		lastSaveTime: time.Now(),
 	}
@@ -94,6 +119,11 @@ func (c *Controller) tick() {
 	// 4. 检查时间限制
 	if c.quotaState.IsLimitExceeded() {
 		c.logger.LogLimitExceeded()
+		if c.quotaState.ConsumeLimitNotification() {
+			if err := c.notifier.NotifyLimitExceeded(); err != nil {
+				c.logger.Error(fmt.Sprintf("超限弹窗失败: %v", err))
+			}
+		}
 
 		// 终止所有游戏进程
 		for _, proc := range gameProcesses {
@@ -103,15 +133,21 @@ func (c *Controller) tick() {
 		}
 	} else {
 		// 检查警告阈值
-		first, final := c.quotaState.CheckWarningThresholds()
+		first, final := c.quotaState.ConsumeWarningNotifications()
 
 		if final {
 			remaining := c.quotaState.GetRemainingMinutes()
 			c.logger.Warn(fmt.Sprintf("最后警告：剩余游戏时间仅剩 %d 分钟！", remaining))
+			if err := c.notifier.NotifyFinalWarning(remaining); err != nil {
+				c.logger.Error(fmt.Sprintf("最后警告弹窗失败: %v", err))
+			}
 		} else if first {
 			remaining := c.quotaState.GetRemainingMinutes()
 			c.logger.Warn(fmt.Sprintf("警告：剩余游戏时间不足 %d 分钟（剩余 %d 分钟）",
 				c.config.FirstThreshold, remaining))
+			if err := c.notifier.NotifyFirstWarning(remaining); err != nil {
+				c.logger.Error(fmt.Sprintf("首次警告弹窗失败: %v", err))
+			}
 		}
 	}
 

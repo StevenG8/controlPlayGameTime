@@ -14,9 +14,12 @@ type QuotaState struct {
 	mu  sync.Mutex
 	cfg *config.Config
 
-	AccumulatedTime int64 `json:"accumulatedTime"` // 累计游戏时间（秒）
-	LastResetTime   int64 `json:"lastResetTime"`   // 上次重置时间（Unix 时间戳）
-	NextResetTime   int64 `json:"nextResetTime"`   // 下次重置时间（Unix 时间戳）
+	AccumulatedTime      int64 `json:"accumulatedTime"`      // 累计游戏时间（秒）
+	LastResetTime        int64 `json:"lastResetTime"`        // 上次重置时间（Unix 时间戳）
+	NextResetTime        int64 `json:"nextResetTime"`        // 下次重置时间（Unix 时间戳）
+	FirstWarningNotified bool  `json:"firstWarningNotified"` // 首次警告是否已提示
+	FinalWarningNotified bool  `json:"finalWarningNotified"` // 最后警告是否已提示
+	LimitNotified        bool  `json:"limitNotified"`        // 超限是否已提示
 }
 
 // NewQuotaState 创建新的配额状态
@@ -98,6 +101,9 @@ func (q *QuotaState) Reset() error {
 	now := time.Now()
 	q.AccumulatedTime = 0
 	q.LastResetTime = now.Unix()
+	q.FirstWarningNotified = false
+	q.FinalWarningNotified = false
+	q.LimitNotified = false
 
 	// 重新计算下次重置时间
 	resetTimeParsed, err := time.Parse("15:04", q.cfg.ResetTime)
@@ -219,4 +225,48 @@ func (q *QuotaState) CheckWarningThresholds() (first, final bool) {
 	final = remaining <= q.cfg.FinalThreshold
 
 	return
+}
+
+// ConsumeWarningNotifications 检查并消费警告阈值，确保每个阈值每天只触发一次
+func (q *QuotaState) ConsumeWarningNotifications() (first, final bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	accumulated := int(q.AccumulatedTime / 60)
+	remaining := q.cfg.DailyLimit - accumulated
+	if remaining < 0 {
+		remaining = 0
+	}
+
+	if remaining <= q.cfg.FinalThreshold {
+		if !q.FinalWarningNotified {
+			q.FinalWarningNotified = true
+			final = true
+		}
+		return
+	}
+
+	if remaining <= q.cfg.FirstThreshold && remaining > q.cfg.FinalThreshold {
+		if !q.FirstWarningNotified {
+			q.FirstWarningNotified = true
+			first = true
+		}
+	}
+
+	return
+}
+
+// ConsumeLimitNotification 检查并消费超限通知，确保每天只触发一次
+func (q *QuotaState) ConsumeLimitNotification() bool {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	if int(q.AccumulatedTime/60) < q.cfg.DailyLimit {
+		return false
+	}
+	if q.LimitNotified {
+		return false
+	}
+	q.LimitNotified = true
+	return true
 }
