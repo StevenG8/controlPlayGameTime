@@ -35,4 +35,4 @@
 - [x] 6.1 为阈值去重逻辑补充单元测试（重复轮询只触发一次、重置后可再次触发）
 - [x] 6.2 为单实例机制补充测试（并发启动拒绝第二实例）
 - [x] 6.3 为通知调用链增加可测试替身，验证首警告/末警告/超限场景触发行为
-- [ ] 6.4 手工验证 `add-autostart.bat` / `remove-autostart.bat` 在目标 Windows 环境的执行流程与异常提示
+- [x] 6.4 手工验证 `add-autostart.bat` / `remove-autostart.bat` 在目标 Windows 环境的执行流程与异常提示
