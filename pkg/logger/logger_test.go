@@ -9,15 +9,43 @@ import (
 	"time"
 )
 
-func TestNewLogger(t *testing.T) {
-	tmpDir := t.TempDir()
-	logPath := filepath.Join(tmpDir, "test.log")
+var (
+	testLogger  *Logger
+	testLogDir  string
+	testLogPath string
+)
 
-	logger, err := NewLogger(logPath)
+func TestMain(m *testing.M) {
+	var err error
+	testLogDir, err = os.MkdirTemp("", "logger-test-*")
+	if err != nil {
+		panic(err)
+	}
+
+	testLogPath = filepath.Join(testLogDir, "test.log")
+	testLogger, err = NewLogger(testLogPath)
+	if err != nil {
+		panic(err)
+	}
+
+	code := m.Run()
+	_ = testLogger.Close()
+	_ = os.RemoveAll(testLogDir)
+	os.Exit(code)
+}
+
+func resetLogFile(t *testing.T) {
+	t.Helper()
+	if err := os.WriteFile(testLogPath, []byte{}, 0644); err != nil {
+		t.Fatalf("reset log file failed: %v", err)
+	}
+}
+
+func TestNewLogger(t *testing.T) {
+	logger, err := NewLogger(filepath.Join(t.TempDir(), "another.log"))
 	if err != nil {
 		t.Fatalf("NewLogger() failed: %v", err)
 	}
-	defer logger.Close()
 
 	if logger == nil {
 		t.Error("NewLogger() should return a non-nil logger")
@@ -25,19 +53,12 @@ func TestNewLogger(t *testing.T) {
 }
 
 func TestInfo(t *testing.T) {
-	tmpDir := t.TempDir()
-	logPath := filepath.Join(tmpDir, "test.log")
+	resetLogFile(t)
 
-	logger, err := NewLogger(logPath)
-	if err != nil {
-		t.Fatalf("NewLogger() failed: %v", err)
-	}
-	defer logger.Close()
-
-	logger.Info("Test info message")
+	testLogger.Infof("Test info message")
 
 	// 读取日志文件
-	data, err := os.ReadFile(logPath)
+	data, err := os.ReadFile(testLogPath)
 	if err != nil {
 		t.Fatalf("ReadFile() failed: %v", err)
 	}
@@ -57,19 +78,12 @@ func TestInfo(t *testing.T) {
 }
 
 func TestLogGameStart(t *testing.T) {
-	tmpDir := t.TempDir()
-	logPath := filepath.Join(tmpDir, "test.log")
+	resetLogFile(t)
 
-	logger, err := NewLogger(logPath)
-	if err != nil {
-		t.Fatalf("NewLogger() failed: %v", err)
-	}
-	defer logger.Close()
-
-	logger.LogGameStart("game.exe")
+	testLogger.LogGameStart("game.exe")
 
 	// 读取日志文件
-	data, err := os.ReadFile(logPath)
+	data, err := os.ReadFile(testLogPath)
 	if err != nil {
 		t.Fatalf("ReadFile() failed: %v", err)
 	}
@@ -89,19 +103,12 @@ func TestLogGameStart(t *testing.T) {
 }
 
 func TestLogGameStop(t *testing.T) {
-	tmpDir := t.TempDir()
-	logPath := filepath.Join(tmpDir, "test.log")
+	resetLogFile(t)
 
-	logger, err := NewLogger(logPath)
-	if err != nil {
-		t.Fatalf("NewLogger() failed: %v", err)
-	}
-	defer logger.Close()
-
-	logger.LogGameStop("game.exe", 60000)
+	testLogger.LogGameStop("game.exe", 60000)
 
 	// 读取日志文件
-	data, err := os.ReadFile(logPath)
+	data, err := os.ReadFile(testLogPath)
 	if err != nil {
 		t.Fatalf("ReadFile() failed: %v", err)
 	}
@@ -121,19 +128,12 @@ func TestLogGameStop(t *testing.T) {
 }
 
 func TestLogQuotaReset(t *testing.T) {
-	tmpDir := t.TempDir()
-	logPath := filepath.Join(tmpDir, "test.log")
+	resetLogFile(t)
 
-	logger, err := NewLogger(logPath)
-	if err != nil {
-		t.Fatalf("NewLogger() failed: %v", err)
-	}
-	defer logger.Close()
-
-	logger.LogQuotaReset()
+	testLogger.LogQuotaReset()
 
 	// 读取日志文件
-	data, err := os.ReadFile(logPath)
+	data, err := os.ReadFile(testLogPath)
 	if err != nil {
 		t.Fatalf("ReadFile() failed: %v", err)
 	}
@@ -149,19 +149,12 @@ func TestLogQuotaReset(t *testing.T) {
 }
 
 func TestLogLimitExceeded(t *testing.T) {
-	tmpDir := t.TempDir()
-	logPath := filepath.Join(tmpDir, "test.log")
+	resetLogFile(t)
 
-	logger, err := NewLogger(logPath)
-	if err != nil {
-		t.Fatalf("NewLogger() failed: %v", err)
-	}
-	defer logger.Close()
-
-	logger.LogLimitExceeded()
+	testLogger.LogLimitExceeded()
 
 	// 读取日志文件
-	data, err := os.ReadFile(logPath)
+	data, err := os.ReadFile(testLogPath)
 	if err != nil {
 		t.Fatalf("ReadFile() failed: %v", err)
 	}
@@ -181,21 +174,14 @@ func TestLogLimitExceeded(t *testing.T) {
 }
 
 func TestMultipleLogEntries(t *testing.T) {
-	tmpDir := t.TempDir()
-	logPath := filepath.Join(tmpDir, "test.log")
+	resetLogFile(t)
 
-	logger, err := NewLogger(logPath)
-	if err != nil {
-		t.Fatalf("NewLogger() failed: %v", err)
-	}
-	defer logger.Close()
-
-	logger.Info("First message")
-	logger.Warn("Second message")
-	logger.Error("Third message")
+	testLogger.Infof("First message")
+	testLogger.Warnf("Second message")
+	testLogger.Errorf("Third message")
 
 	// 读取日志文件
-	data, err := os.ReadFile(logPath)
+	data, err := os.ReadFile(testLogPath)
 	if err != nil {
 		t.Fatalf("ReadFile() failed: %v", err)
 	}
@@ -227,14 +213,13 @@ func TestLogLevelStrings(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(string(tt.level), func(t *testing.T) {
-			tmpDir := t.TempDir()
-			logPath := filepath.Join(tmpDir, "test.log")
-
-			logger, err := NewLogger(logPath)
+			logger, err := NewLogger(filepath.Join(t.TempDir(), "unused.log"))
 			if err != nil {
 				t.Fatalf("NewLogger() failed: %v", err)
 			}
-			defer logger.Close()
+			if logger == nil {
+				t.Fatalf("logger should not be nil")
+			}
 
 			// 使用反射来测试私有方法，这里简化处理
 			// 实际测试在测试日志级别字符串输出
@@ -243,21 +228,14 @@ func TestLogLevelStrings(t *testing.T) {
 }
 
 func TestLogEntryTimestamp(t *testing.T) {
-	tmpDir := t.TempDir()
-	logPath := filepath.Join(tmpDir, "test.log")
-
-	logger, err := NewLogger(logPath)
-	if err != nil {
-		t.Fatalf("NewLogger() failed: %v", err)
-	}
-	defer logger.Close()
+	resetLogFile(t)
 
 	before := time.Now()
-	logger.Info("Test message")
+	testLogger.Infof("Test message")
 	after := time.Now()
 
 	// 读取日志文件
-	data, err := os.ReadFile(logPath)
+	data, err := os.ReadFile(testLogPath)
 	if err != nil {
 		t.Fatalf("ReadFile() failed: %v", err)
 	}

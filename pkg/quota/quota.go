@@ -124,14 +124,11 @@ func (q *QuotaState) Reset() error {
 	return nil
 }
 
-// GetNextResetTime 获取下次重置时间
-func (q *QuotaState) GetNextResetTime() time.Time {
-	return time.Unix(q.NextResetTime, 0)
-}
-
 // TimeUntilNextReset 获取距离下次重置的时间
 func (q *QuotaState) TimeUntilNextReset() time.Duration {
-	return time.Until(q.GetNextResetTime())
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return time.Until(time.Unix(q.NextResetTime, 0))
 }
 
 // SaveToFile 保存状态到文件
@@ -149,26 +146,6 @@ func (q *QuotaState) SaveToFile() error {
 	}
 
 	return nil
-}
-
-// loadFromFile 从文件加载状态
-func loadFromFile(path string) (*QuotaState, error) {
-	// 如果文件不存在，返回错误
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil, fmt.Errorf("状态文件不存在: %s", path)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("无法读取状态文件: %w", err)
-	}
-
-	var state QuotaState
-	if err := json.Unmarshal(data, &state); err != nil {
-		return nil, fmt.Errorf("无法解析状态文件: %w", err)
-	}
-
-	return &state, nil
 }
 
 // LoadFromFile 从文件加载状态
@@ -208,23 +185,6 @@ func (q *QuotaState) Validate() error {
 	}
 
 	return nil
-}
-
-// CheckWarningThresholds 检查警告阈值
-func (q *QuotaState) CheckWarningThresholds() (first, final bool) {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-
-	accumulated := int(q.AccumulatedTime / 60)
-	remaining := q.cfg.DailyLimit - accumulated
-	if remaining < 0 {
-		remaining = 0
-	}
-
-	first = remaining <= q.cfg.FirstThreshold && remaining > q.cfg.FinalThreshold
-	final = remaining <= q.cfg.FinalThreshold
-
-	return
 }
 
 // ConsumeWarningNotifications 检查并消费警告阈值，确保每个阈值每天只触发一次

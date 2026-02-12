@@ -69,19 +69,17 @@ func createTestController(t *testing.T) (*Controller, *mockScanner, *fakeNotifie
 	if err != nil {
 		t.Fatalf("创建测试配额状态失败: %v", err)
 	}
-	log, err := logger.NewLogger(cfg.LogFile)
-	if err != nil {
+	if _, err := logger.NewLogger(cfg.LogFile); err != nil {
 		t.Fatalf("创建测试日志器失败: %v", err)
 	}
 	mock := &mockScanner{}
 	n := &fakeNotifier{}
-	c := NewControllerWithDeps(cfg, qState, log, mock, n)
+	c := NewControllerWithDeps(cfg, qState, mock, n)
 	return c, mock, n, qState
 }
 
 func TestControllerTick_FirstWarningNotifyOnce(t *testing.T) {
 	controller, mock, n, qState := createTestController(t)
-	defer controller.logger.Close()
 
 	mock.findGameProcessesFunc = func(games []string) ([]process.ProcessInfo, error) {
 		return []process.ProcessInfo{}, nil
@@ -101,7 +99,6 @@ func TestControllerTick_FirstWarningNotifyOnce(t *testing.T) {
 
 func TestControllerTick_FinalWarningNotifyOnce(t *testing.T) {
 	controller, mock, n, qState := createTestController(t)
-	defer controller.logger.Close()
 
 	mock.findGameProcessesFunc = func(games []string) ([]process.ProcessInfo, error) {
 		return []process.ProcessInfo{}, nil
@@ -118,7 +115,6 @@ func TestControllerTick_FinalWarningNotifyOnce(t *testing.T) {
 
 func TestControllerTick_LimitExceededNotifyAndTerminate(t *testing.T) {
 	controller, mock, n, qState := createTestController(t)
-	defer controller.logger.Close()
 
 	mock.findGameProcessesFunc = func(games []string) ([]process.ProcessInfo, error) {
 		return []process.ProcessInfo{{PID: 1234, Name: "game.exe", StartTime: time.Now()}}, nil
@@ -144,7 +140,6 @@ func TestControllerTick_LimitExceededNotifyAndTerminate(t *testing.T) {
 
 func TestControllerStatus(t *testing.T) {
 	controller, mock, _, qState := createTestController(t)
-	defer controller.logger.Close()
 
 	mock.findGameProcessesFunc = func(games []string) ([]process.ProcessInfo, error) {
 		return []process.ProcessInfo{{PID: 1, Name: "game.exe", StartTime: time.Now()}}, nil

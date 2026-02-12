@@ -1,11 +1,13 @@
 package logger
 
 import (
-	"encoding/json"
 	"fmt"
+	"go.uber.org/zap/zapcore"
 	"os"
 	"sync"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 // LogLevel 日志级别
@@ -31,9 +33,10 @@ type LogEntry struct {
 // Logger 日志记录器
 type Logger struct {
 	output *os.File
+	zap    *zap.Logger
 }
 
-var logHandle *Logger
+var LogHandle *Logger
 var once sync.Once
 
 // NewLogger 创建新的日志记录器
@@ -41,30 +44,86 @@ func NewLogger(outputPath string) (*Logger, error) {
 	once.Do(func() {
 		var output *os.File
 		var err error
-
 		if outputPath == "" {
 			output = os.Stdout
 		} else {
 			output, err = os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 			if err != nil {
-				panic(fmt.Sprintf("无法打开日志文件: %w", err))
+				panic(fmt.Sprintf("无法打开日志文件: %v", err))
 			}
 		}
-		logHandle = &Logger{output: output}
+
+		encoderCfg := zapcore.EncoderConfig{
+			TimeKey:        "timestamp",
+			LevelKey:       "level",
+			MessageKey:     "message",
+			EncodeLevel:    zapcore.LowercaseLevelEncoder,
+			EncodeTime:     zapcore.RFC3339NanoTimeEncoder,
+			LineEnding:     zapcore.DefaultLineEnding,
+			EncodeDuration: zapcore.MillisDurationEncoder,
+		}
+		core := zapcore.NewCore(
+			zapcore.NewJSONEncoder(encoderCfg),
+			zapcore.AddSync(output),
+			zapcore.DebugLevel,
+		)
+
+		LogHandle = &Logger{
+			output: output,
+			zap:    zap.New(core),
+		}
 	})
 
-	return logHandle, nil
+	return LogHandle, nil
 }
 
 func GetLogger() *Logger {
-	if logHandle == nil {
+	if LogHandle == nil {
 		panic("not init logger")
 	}
-	return logHandle
+	return LogHandle
+}
+
+// Infof 使用全局单例记录信息日志
+func Infof(format string, args ...any) {
+	GetLogger().Infof(format, args...)
+}
+
+// Warnf 使用全局单例记录警告日志
+func Warnf(format string, args ...any) {
+	GetLogger().Warnf(format, args...)
+}
+
+// Errorf 使用全局单例记录错误日志
+func Errorf(format string, args ...any) {
+	GetLogger().Errorf(format, args...)
+}
+
+// Debugf 使用全局单例记录调试日志
+func Debugf(format string, args ...any) {
+	GetLogger().Debugf(format, args...)
+}
+
+// LogQuotaReset 使用全局单例记录配额重置事件
+func LogQuotaReset() {
+	GetLogger().LogQuotaReset()
+}
+
+// LogLimitExceeded 使用全局单例记录超限事件
+func LogLimitExceeded() {
+	GetLogger().LogLimitExceeded()
+}
+
+// Close 关闭全局单例日志器
+func Close() error {
+	return GetLogger().Close()
 }
 
 // Close 关闭日志记录器
 func (l *Logger) Close() error {
+	if l != nil && l.zap != nil {
+		_ = l.zap.Sync()
+	}
 	if l.output != os.Stdout && l.output != os.Stderr {
 		return l.output.Close()
 	}
@@ -73,44 +132,58 @@ func (l *Logger) Close() error {
 
 // log 记录日志
 func (l *Logger) log(entry LogEntry) {
-	entry.Timestamp = time.Now()
-	data, err := json.Marshal(entry)
-	if err != nil {
-		fmt.Fprintf(l.output, "无法序列化日志: %v\n", err)
-		return
+	fields := []zap.Field{}
+	if entry.Event != "" {
+		fields = append(fields, zap.String("event", entry.Event))
 	}
-	fmt.Fprintln(l.output, string(data))
+	if entry.Process != "" {
+		fields = append(fields, zap.String("process", entry.Process))
+	}
+	if entry.Duration > 0 {
+		fields = append(fields, zap.Int64("duration", entry.Duration))
+	}
+
+	switch entry.Level {
+	case LevelWarn:
+		l.zap.Warn(entry.Message, fields...)
+	case LevelError:
+		l.zap.Error(entry.Message, fields...)
+	case LevelDebug:
+		l.zap.Debug(entry.Message, fields...)
+	default:
+		l.zap.Info(entry.Message, fields...)
+	}
 }
 
-// Info 记录信息日志
-func (l *Logger) Info(message string) {
+// Infof 记录信息日志
+func (l *Logger) Infof(format string, args ...any) {
 	l.log(LogEntry{
 		Level:   LevelInfo,
-		Message: message,
+		Message: fmt.Sprintf(format, args...),
 	})
 }
 
-// Warn 记录警告日志
-func (l *Logger) Warn(message string) {
+// Warnf 记录警告日志
+func (l *Logger) Warnf(format string, args ...any) {
 	l.log(LogEntry{
 		Level:   LevelWarn,
-		Message: message,
+		Message: fmt.Sprintf(format, args...),
 	})
 }
 
-// Error 记录错误日志
-func (l *Logger) Error(message string) {
+// Errorf 记录错误日志
+func (l *Logger) Errorf(format string, args ...any) {
 	l.log(LogEntry{
 		Level:   LevelError,
-		Message: message,
+		Message: fmt.Sprintf(format, args...),
 	})
 }
 
-// Debug 记录调试日志
-func (l *Logger) Debug(message string) {
+// Debugf 记录调试日志
+func (l *Logger) Debugf(format string, args ...any) {
 	l.log(LogEntry{
 		Level:   LevelDebug,
-		Message: message,
+		Message: fmt.Sprintf(format, args...),
 	})
 }
 

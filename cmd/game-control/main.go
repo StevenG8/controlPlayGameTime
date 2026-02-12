@@ -83,7 +83,7 @@ func runStart() error {
 	} else {
 		qState = loadedState
 		if err := qState.Validate(); err != nil {
-			log.Warn(fmt.Sprintf("状态验证失败，创建新状态: %v", err))
+			log.Warnf("状态验证失败，创建新状态: %v", err)
 			qState, err = quota.NewQuotaState(cfg)
 			if err != nil {
 				return fmt.Errorf("创建配额状态失败: %w", err)
@@ -91,7 +91,7 @@ func runStart() error {
 		}
 	}
 
-	controller := internal.NewController(cfg, qState, log)
+	controller := internal.NewController(cfg, qState)
 	return controller.Run()
 }
 
@@ -115,7 +115,7 @@ func runStatus() error {
 	}
 
 	log, _ := logger.NewLogger("")
-	controller := internal.NewController(cfg, qState, log)
+	controller := internal.NewController(cfg, qState)
 
 	shouldReset, err := qState.ShouldReset()
 	if err != nil {
@@ -151,7 +151,7 @@ func runStatus() error {
 	minutes := int(nextReset.Minutes()) % 60
 	fmt.Printf("\n距离下次重置: %d 小时 %d 分钟\n", hours, minutes)
 
-	log.Close()
+	_ = log.Close()
 	return nil
 }
 
