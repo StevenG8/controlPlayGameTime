@@ -44,7 +44,7 @@ func main() {
 
 func runStart() error {
 	// 获取配置文件路径
-	configPath := "config.yaml.tmpl"
+	configPath := "config.yaml"
 	if len(os.Args) > 2 {
 		configPath = os.Args[2]
 	}
@@ -95,7 +95,7 @@ func runStart() error {
 }
 
 func runStatus() error {
-	configPath := "config.yaml.tmpl"
+	configPath := "config.yaml"
 	if len(os.Args) > 2 {
 		configPath = os.Args[2]
 	}
@@ -111,7 +111,6 @@ func runStatus() error {
 	if err != nil {
 		return fmt.Errorf("加载状态失败: %w", err)
 	}
-
 	if qState == nil {
 		return fmt.Errorf("没有找到状态文件，请先运行 start 命令")
 	}
@@ -162,7 +161,7 @@ func runStatus() error {
 }
 
 func runValidate() error {
-	configPath := "config.yaml.tmpl"
+	configPath := "config.yaml"
 	if len(os.Args) > 2 {
 		configPath = os.Args[2]
 	}
