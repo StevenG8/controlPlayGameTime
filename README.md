@@ -96,4 +96,3 @@ Get-Process game-control -ErrorAction SilentlyContinue
 
 - 仅支持 Windows
 - 终止进程通常需要管理员权限
-- 若出现“拒绝访问/无权限结束进程”，请用管理员终端重新执行 `add-autostart.bat` 以创建 `RL HIGHEST` 的计划任务
