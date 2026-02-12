@@ -13,11 +13,12 @@ if not exist "%START_SCRIPT%" (
 )
 
 set "TASK_CMD=cmd.exe /c \"\"%START_SCRIPT%\"\""
-schtasks /Create /F /SC ONLOGON /TN "%TASK_NAME%" /TR "%TASK_CMD%"
+schtasks /Create /F /SC ONLOGON /RL HIGHEST /TN "%TASK_NAME%" /TR "%TASK_CMD%"
 if errorlevel 1 (
   echo [ERROR] failed to create scheduled task "%TASK_NAME%"
+  echo [HINT] try running this script in an Administrator terminal
   exit /b 1
 )
 
-echo [OK] scheduled task created: "%TASK_NAME%"
+echo [OK] scheduled task created: "%TASK_NAME%" (run level: HIGHEST)
 exit /b 0
