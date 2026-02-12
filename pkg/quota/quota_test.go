@@ -206,7 +206,7 @@ func TestSaveToFile(t *testing.T) {
 	tempFile := filepath.Join(t.TempDir(), "state.json")
 
 	// 保存
-	if err := state.SaveToFile(tempFile); err != nil {
+	if err := state.SaveToFile(); err != nil {
 		t.Fatalf("SaveToFile 失败: %v", err)
 	}
 
@@ -238,15 +238,13 @@ func TestLoadFromFile(t *testing.T) {
 	// 添加一些时间
 	state.AddTime(2700) // 45分钟
 
-	tempFile := filepath.Join(t.TempDir(), "state.json")
-
 	// 先保存
-	if err := state.SaveToFile(tempFile); err != nil {
+	if err := state.SaveToFile(); err != nil {
 		t.Fatalf("SaveToFile 失败: %v", err)
 	}
 
 	// 再加载
-	loadedState, err := LoadFromFile(tempFile)
+	loadedState, err := LoadFromFile(cfg)
 	if err != nil {
 		t.Fatalf("LoadFromFile 失败: %v", err)
 	}
@@ -264,7 +262,7 @@ func TestLoadFromFile(t *testing.T) {
 func TestLoadFromFile_FileNotExist(t *testing.T) {
 	tempFile := filepath.Join(t.TempDir(), "nonexistent.json")
 
-	_, err := LoadFromFile(tempFile)
+	_, err := loadFromFile(tempFile)
 	// LoadFromFile 在文件不存在时返回错误
 	if err == nil {
 		t.Error("预期加载不存在的文件应返回错误")

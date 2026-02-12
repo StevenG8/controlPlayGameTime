@@ -15,23 +15,21 @@ import (
 
 // Controller 主控制器
 type Controller struct {
-	config        *config.Config
-	quotaState    *quota.QuotaState
-	scanner       *process.Scanner
-	logger        *logger.Logger
-	stateFilePath string
-	lastSaveTime  time.Time
+	config       *config.Config
+	quotaState   *quota.QuotaState
+	scanner      *process.Scanner
+	logger       *logger.Logger
+	lastSaveTime time.Time
 }
 
 // NewController 创建新的控制器
 func NewController(cfg *config.Config, qState *quota.QuotaState, log *logger.Logger) *Controller {
 	return &Controller{
-		config:        cfg,
-		quotaState:    qState,
-		scanner:       process.NewScanner(),
-		logger:        log,
-		stateFilePath: cfg.StateFile,
-		lastSaveTime:  time.Now(),
+		config:       cfg,
+		quotaState:   qState,
+		scanner:      process.NewScanner(),
+		logger:       log,
+		lastSaveTime: time.Now(),
 	}
 }
 
@@ -119,7 +117,7 @@ func (c *Controller) tick() {
 
 	// 5. 定期保存状态
 	if time.Since(c.lastSaveTime) >= 1*time.Minute {
-		if err := c.quotaState.SaveToFile(c.stateFilePath); err != nil {
+		if err := c.quotaState.SaveToFile(); err != nil {
 			c.logger.Error(fmt.Sprintf("保存状态失败: %v", err))
 		} else {
 			c.lastSaveTime = time.Now()
@@ -132,7 +130,7 @@ func (c *Controller) cleanup() {
 	c.logger.Info("正在保存状态...")
 
 	// 保存状态
-	if err := c.quotaState.SaveToFile(c.stateFilePath); err != nil {
+	if err := c.quotaState.SaveToFile(); err != nil {
 		c.logger.Error(fmt.Sprintf("保存状态失败: %v", err))
 	}
 

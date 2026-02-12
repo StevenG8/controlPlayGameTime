@@ -19,10 +19,6 @@ type QuotaState struct {
 	NextResetTime   int64 `json:"nextResetTime"`   // 下次重置时间（Unix 时间戳）
 }
 
-func (q *QuotaState) SetCfg(cfg *config.Config) {
-	q.cfg = cfg
-}
-
 // NewQuotaState 创建新的配额状态
 func NewQuotaState(cfg *config.Config) (*QuotaState, error) {
 	now := time.Now()
@@ -133,7 +129,7 @@ func (q *QuotaState) TimeUntilNextReset() time.Duration {
 }
 
 // SaveToFile 保存状态到文件
-func (q *QuotaState) SaveToFile(path string) error {
+func (q *QuotaState) SaveToFile() error {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -142,15 +138,15 @@ func (q *QuotaState) SaveToFile(path string) error {
 		return fmt.Errorf("无法序列化状态: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(q.cfg.StateFile, data, 0644); err != nil {
 		return fmt.Errorf("无法写入状态文件: %w", err)
 	}
 
 	return nil
 }
 
-// LoadFromFile 从文件加载状态
-func LoadFromFile(path string) (*QuotaState, error) {
+// loadFromFile 从文件加载状态
+func loadFromFile(path string) (*QuotaState, error) {
 	// 如果文件不存在，返回错误
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return nil, fmt.Errorf("状态文件不存在: %s", path)
@@ -165,6 +161,28 @@ func LoadFromFile(path string) (*QuotaState, error) {
 	if err := json.Unmarshal(data, &state); err != nil {
 		return nil, fmt.Errorf("无法解析状态文件: %w", err)
 	}
+
+	return &state, nil
+}
+
+// LoadFromFile 从文件加载状态
+func LoadFromFile(cfg *config.Config) (*QuotaState, error) {
+	path := cfg.StateFile
+	// 如果文件不存在，返回错误
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		return nil, fmt.Errorf("状态文件不存在: %s", path)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("无法读取状态文件: %w", err)
+	}
+
+	var state QuotaState
+	if err := json.Unmarshal(data, &state); err != nil {
+		return nil, fmt.Errorf("无法解析状态文件: %w", err)
+	}
+	state.cfg = cfg
 
 	return &state, nil
 }

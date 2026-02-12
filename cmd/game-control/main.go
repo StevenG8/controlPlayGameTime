@@ -28,11 +28,6 @@ func main() {
 			fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 			os.Exit(1)
 		}
-	case "reset":
-		if err := runReset(); err != nil {
-			fmt.Fprintf(os.Stderr, "错误: %v\n", err)
-			os.Exit(1)
-		}
 	case "validate":
 		if err := runValidate(); err != nil {
 			fmt.Fprintf(os.Stderr, "错误: %v\n", err)
@@ -74,7 +69,7 @@ func runStart() error {
 
 	// 加载或创建配额状态
 	var qState *quota.QuotaState
-	loadedState, err := quota.LoadFromFile(cfg.StateFile)
+	loadedState, err := quota.LoadFromFile(cfg)
 	if err != nil || loadedState == nil {
 		qState, err = quota.NewQuotaState(cfg)
 		if err != nil {
@@ -82,7 +77,6 @@ func runStart() error {
 		}
 	} else {
 		qState = loadedState
-		qState.SetCfg(cfg)
 		// 验证状态
 		if err := qState.Validate(); err != nil {
 			log.Warn(fmt.Sprintf("状态验证失败，创建新状态: %v", err))
@@ -113,7 +107,7 @@ func runStatus() error {
 	}
 
 	// 加载配额状态
-	qState, err := quota.LoadFromFile(cfg.StateFile)
+	qState, err := quota.LoadFromFile(cfg)
 	if err != nil {
 		return fmt.Errorf("加载状态失败: %w", err)
 	}
@@ -125,6 +119,22 @@ func runStatus() error {
 	// 创建控制器
 	log, _ := logger.NewLogger("") // 使用标准输出
 	controller := internal.NewController(cfg, qState, log)
+
+	// 检查是否需要重置
+	shouldReset, err := qState.ShouldReset()
+	if err != nil {
+		return fmt.Errorf("检查重置状态失败: %v", err)
+	}
+
+	if shouldReset {
+		if err := qState.Reset(); err != nil {
+			return fmt.Errorf("重置配额失败: %v", err)
+		}
+		log.LogQuotaReset()
+		if err := qState.SaveToFile(); err != nil {
+			return fmt.Errorf("保存重置状态失败: %v", err)
+		}
+	}
 
 	// 获取状态
 	status := controller.GetStatus()
@@ -148,42 +158,6 @@ func runStatus() error {
 	fmt.Printf("\n距离下次重置: %d 小时 %d 分钟\n", hours, minutes)
 
 	log.Close()
-	return nil
-}
-
-func runReset() error {
-	configPath := "config.yaml.tmpl"
-	if len(os.Args) > 2 {
-		configPath = os.Args[2]
-	}
-
-	// 加载配置
-	cfg, err := config.LoadFromFile(configPath)
-	if err != nil {
-		return fmt.Errorf("加载配置失败: %w", err)
-	}
-
-	// 加载配额状态
-	qState, err := quota.LoadFromFile(cfg.StateFile)
-	if err != nil {
-		return fmt.Errorf("加载状态失败: %w", err)
-	}
-
-	if qState == nil {
-		return fmt.Errorf("没有找到状态文件，请先运行 start 命令")
-	}
-
-	// 重置配额
-	if err := qState.Reset(); err != nil {
-		return fmt.Errorf("重置配额失败: %w", err)
-	}
-
-	// 保存状态
-	if err := qState.SaveToFile(cfg.StateFile); err != nil {
-		return fmt.Errorf("保存状态失败: %w", err)
-	}
-
-	fmt.Println("每日游戏时间配额已重置")
 	return nil
 }
 
@@ -223,7 +197,6 @@ func printHelp() {
 	fmt.Println("可用命令:")
 	fmt.Println("  start [config]  启动游戏时间控制守护进程")
 	fmt.Println("  status [config] 查询当前游戏时间状态")
-	fmt.Println("  reset [config]  手动重置每日游戏时间配额")
 	fmt.Println("  validate [config] 验证配置文件")
 	fmt.Println("  help           显示此帮助信息")
 	fmt.Println()
